@@ -1,0 +1,10 @@
+/.ipynb_checkpoints
+/__pycache__
+/Modules/__pycache__
+/results
+/wandb
+/temp
+/Inference_Test
+*.pyc
+
+temp.py

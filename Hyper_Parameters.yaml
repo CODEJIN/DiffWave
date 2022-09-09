@@ -1,0 +1,102 @@
+Sound:
+    N_FFT: 1024
+    Mel_Dim: 80
+    Frame_Length: 1024
+    Frame_Shift: 256
+    Sample_Rate: 22050
+    Mel_F_Min: 0
+    Mel_F_Max: 8000
+    F0_Min: 50
+    F0_Max: 880
+
+Diffusion:
+    Size: 64
+    Max_Step: 100
+    Denoiser:
+        Kernel_Size: 3
+        Stack: 20
+        Dilation_Cycle: 10
+        Stride: [16, 16]
+        Leaky_ReLU_Slope: 0.4
+
+Token_Path: 'D:/Datasets/22K.Emotion/Token.yaml'
+Duration_Path: './Duration_KREN1394.pickle'
+Spectrogram_Range_Info_Path: 'D:/Datasets/22K.Emotion/Spectrogram_Range_Info.yaml'
+Mel_Range_Info_Path: 'D:/Datasets/22K.Emotion/Mel_Range_Info.yaml'
+Log_F0_Info_Path: 'D:/Datasets/22K.Emotion/Log_F0_Info.yaml'
+Energy_Info_Path: 'D:/Datasets/22K.Emotion/Energy_Info.yaml'
+Speaker_Info_Path: 'D:/Datasets/22K.Emotion/Speaker_Info.yaml'
+Emotion_Info_Path: 'D:/Datasets/22K.Emotion/Emotion_Info.yaml'
+Language_Info_Path: 'D:/Datasets/22K.Emotion/Language_Info.yaml'
+Gender_Info_Path: 'D:/Datasets/22K.Emotion/Gender_Info.yaml'
+Language_and_Gender_Info_by_Speaker_Path: 'D:/Datasets/22K.Emotion/Language_and_Gender_Info_by_Speaker.yaml'
+Train:
+    Use_Pattern_Cache: true
+    Train_Pattern:
+        Path: 'D:/Datasets/22K.Emotion/Train'
+        Metadata_File: 'METADATA.PICKLE'
+        Feature_Length:
+            Min: 50
+            Max: 1200
+        Text_Length:
+            Min: 1
+            Max: 200
+        Accumulated_Dataset_Epoch: 1   # This is to prevent slow down from torch.utils.data.DataLoader when the number of patterns is small.
+        Augmentation_Ratio: 0.20
+    Eval_Pattern:
+        Path: 'D:/Datasets/22K.Emotion/Eval'
+        Metadata_File: 'METADATA.PICKLE'
+        Feature_Length:
+            Min: 50
+            Max: 1200
+        Text_Length:
+            Min: 10
+            Max: 200
+    Num_Workers: 0
+    Batch_Size: 32
+    Learning_Rate:
+        Initial: 2.0e-4
+        Warmup_Step: 4000
+    ADAM:
+        Beta1: 0.9
+        Beta2: 0.999
+        Epsilon: 1.0e-7
+    Lambda:
+        Diffusion: 45.0
+        KL: 1.0
+    Segment_Size: 16    # Feature based
+    Weight_Decay: 1.0e-6
+    Gradient_Norm: 1.0
+    Max_Step: 100000
+    Checkpoint_Save_Interval: 5000
+    Logging_Interval: 1
+    Evaluation_Interval: 1000
+    Inference_Interval: 5000
+    Initial_Inference: true
+    Inference_in_Train:
+        Source: [
+            './inference_wav/p226_003.wav',
+            './inference_wav/p228_004.wav',
+            './inference_wav/p232_005.wav',
+            ]
+
+Inference_Batch_Size: 256
+
+Inference_Path: './results/Inference'
+Checkpoint_Path: './results/Checkpoint'
+Log_Path: './results/Log'
+
+Weights_and_Biases:
+    Use: true
+    Project: 'DiffWave'
+    Entity: 'codejin'
+    Name: 'Test'
+    Save_Checkpoint:
+        Use: true
+        Interval: 50000 # Unlike local, The capacity of WandB is small.
+
+Use_Mixed_Precision: true # false
+# Use_Multi_GPU: true
+# Device: '0,1,2,3,4,5,6,7'
+Use_Multi_GPU: false
+Device: '0'
