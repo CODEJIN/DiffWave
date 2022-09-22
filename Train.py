@@ -370,7 +370,7 @@ class Trainer:
             files
             )):
             title = 'Source: {}'.format(source if len(source) < 90 else source[:90] + '…')
-            new_figure = plt.figure(figsize=(20, 5 * 5), dpi=100)
+            new_figure = plt.figure(figsize=(20, 5 * 2), dpi=100)
             ax = plt.subplot2grid((2, 1), (0, 0))            
             plt.imshow(feature[:, :feature_length], aspect='auto', origin='lower')
             plt.colorbar(ax= ax)
@@ -386,7 +386,7 @@ class Trainer:
             wavfile.write(
                 os.path.join(self.hp.Inference_Path, 'Step-{}'.format(self.steps), 'WAV', '{}.wav'.format(file)).replace('\\', '/'),
                 self.hp.Sound.Sample_Rate,
-                audio
+                (audio * 32767.5).astype(np.int16)
                 )
             
     def Inference_Epoch(self):

@@ -3,6 +3,7 @@ import math
 from argparse import Namespace
 from typing import Optional, List, Dict, Union
 from .Layer import Conv1d, ConvTranspose2d, Lambda
+from tqdm import tqdm
 
 class Diffusion(torch.nn.Module):
     def __init__(
@@ -75,7 +76,11 @@ class Diffusion(torch.nn.Module):
             size= (conditions.size(0), conditions.size(2) * self.hp.Sound.Frame_Shift),
             device= conditions.device
             )
-        for diffusion_step in reversed(range(self.timesteps)):
+        for diffusion_step in tqdm(
+            reversed(range(self.timesteps)),
+            desc= '[Diffusion]',
+            total= self.timesteps
+            ):        
             audios = self.P_Sampling(
                 audios= audios,
                 conditions= conditions,
@@ -157,16 +162,19 @@ class Denoiser(torch.nn.Module):
         super().__init__()
         self.hp = hyper_parameters
 
-        assert math.prod(self.hp.Diffusion.Denoiser.Stride) == self.hp.Sound.Frame_Shift
+        assert math.prod(self.hp.Diffusion.Stride) == self.hp.Sound.Frame_Shift
 
         self.prenet = torch.nn.Sequential(
             Lambda(lambda x: x.unsqueeze(1)),
-            torch.nn.utils.weight_norm(Conv1d(
+            Conv1d(
                 in_channels= 1,
                 out_channels= self.hp.Diffusion.Size,
                 kernel_size= 1,
                 w_init_gain= 'relu'
-                )),
+                ),
+            torch.nn.BatchNorm1d(
+                num_features= self.hp.Diffusion.Size
+                ),
             torch.nn.ReLU()
             )                                                                                                                      
 
@@ -196,21 +204,24 @@ class Denoiser(torch.nn.Module):
             Residual_Block(
                 channels= self.hp.Diffusion.Size,
                 condition_channels= self.hp.Sound.Mel_Dim,
-                kernel_size= self.hp.Diffusion.Denoiser.Kernel_Size,
-                dilation= 2 ** (index % self.hp.Diffusion.Denoiser.Dilation_Cycle),
-                strides= self.hp.Diffusion.Denoiser.Stride,
-                leaky_relu_slope= self.hp.Diffusion.Denoiser.Leaky_ReLU_Slope,
+                kernel_size= self.hp.Diffusion.Kernel_Size,
+                dilation= 2 ** (index % self.hp.Diffusion.Dilation_Cycle),
+                strides= self.hp.Diffusion.Stride,
+                leaky_relu_slope= self.hp.Diffusion.Leaky_ReLU_Slope,
                 )
-            for index in range(self.hp.Diffusion.Denoiser.Stack)
+            for index in range(self.hp.Diffusion.Stack)
             ])
 
         self.projection = torch.nn.Sequential(
-            torch.nn.utils.weight_norm(Conv1d(
+            Conv1d(
                 in_channels= self.hp.Diffusion.Size,
                 out_channels= self.hp.Diffusion.Size,
                 kernel_size= 1,
                 w_init_gain= 'relu'
-                )),
+                ),
+            torch.nn.BatchNorm1d(
+                num_features= self.hp.Diffusion.Size
+                ),
             torch.nn.ReLU(),
             Conv1d(
                 in_channels= self.hp.Diffusion.Size,
@@ -219,8 +230,8 @@ class Denoiser(torch.nn.Module):
                 ),
             Lambda(lambda x: x.squeeze(1))
             )
-        self.projection[-2].weight.data.zero_()
-        self.projection[-2].bias.data.zero_()
+        torch.nn.init.zeros_(self.projection[-2].weight)    # This is key factor....
+        torch.nn.init.zeros_(self.projection[-2].bias)    # This is key factor....
 
     def forward(
         self,
@@ -246,7 +257,7 @@ class Denoiser(torch.nn.Module):
                 )   # [Batch, Diffusion, Audio_t], [Batch, Diffusion, Audio_t]
             skips_list.append(skips)
 
-        x = torch.stack(skips_list, dim= 0).sum(dim= 0) / math.sqrt(self.hp.Diffusion.Denoiser.Stack)
+        x = torch.stack(skips_list, dim= 0).sum(dim= 0) / math.sqrt(self.hp.Diffusion.Stack)
         x = self.projection(x)  # [Batch, Audio_t]
 
         return x
@@ -285,35 +296,47 @@ class Residual_Block(torch.nn.Module):
             kernel_size= 1
             )
 
-        self.dilated_conv = torch.nn.utils.weight_norm(Conv1d(
-            in_channels= channels,
-            out_channels= channels * 2,
-            kernel_size= kernel_size,
-            dilation= dilation,
-            padding= dilation * (kernel_size - 1) // 2,
-            w_init_gain= 'gate'
-            ))
+        self.dilated_conv = torch.nn.Sequential(
+            Conv1d(
+                in_channels= channels,
+                out_channels= channels * 2,
+                kernel_size= kernel_size,
+                dilation= dilation,
+                padding= dilation * (kernel_size - 1) // 2,
+                w_init_gain= 'gate'
+                ),
+            torch.nn.BatchNorm1d(
+                num_features= channels * 2
+                )
+            )
 
         self.condition = torch.nn.Sequential()
         self.condition.add_module('Unsqueeze', Lambda(lambda x: x.unsqueeze(1)))
         for index, stride in enumerate(strides):
-            self.condition.add_module(f'Upsample_{index}', torch.nn.utils.weight_norm(ConvTranspose2d(
+            self.condition.add_module(f'Upsample_{index}', ConvTranspose2d(
                 in_channels= 1,
                 out_channels= 1,
                 kernel_size= (kernel_size, stride * 2),
                 stride= (1, stride),
-                padding= ((kernel_size - 1) // 2, stride // 2)
-                )))
+                padding= ((kernel_size - 1) // 2, stride // 2),
+                w_init_gain= 'leaky_relu'
+                ))
+            self.condition.add_module(f'Norm_{index}', torch.nn.BatchNorm2d(
+                num_features= 1
+                ))
             self.condition.add_module(f'LeakyReLU_{index}', torch.nn.LeakyReLU(
                 negative_slope= leaky_relu_slope
                 ))
         self.condition.add_module('Squeeze', Lambda(lambda x: x.squeeze(1)))
-        self.condition.add_module('Conv', torch.nn.utils.weight_norm(Conv1d(
+        self.condition.add_module('Conv', Conv1d(
             in_channels= condition_channels,
             out_channels= channels * 2,
             kernel_size= 1,
             w_init_gain= 'gate'
-            )))
+            ))
+        self.condition.add_module('Norm', torch.nn.BatchNorm1d(
+            num_features= channels * 2
+            ))
 
         self.projection = Conv1d(
             in_channels= channels,
