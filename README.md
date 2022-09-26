@@ -62,3 +62,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 OMP_NUM_THREADS=32 python -m torch.distribu
 
 # Inference
 * Please refer [Inference.py](./Inference.py) and [Inference.ipynb](./Inference.ipynb)
+
+# Checkpoint
+|Main parameters                 | Hyper parameter                        | Checkpoint                     |
+|--------------------------------|----------------------------------------|--------------------------------|
+|64 diffusion size and 20 stacks | [Here](./Exp/Hyper_Parameters_64.yaml) | [Here](./Exp/Checkpoint_64.pt) |

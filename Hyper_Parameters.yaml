@@ -10,10 +10,10 @@ Sound:
     F0_Max: 880
 
 Diffusion:
-    Size: 64
+    Size: 128
     Max_Step: 1000
     Kernel_Size: 5
-    Stack: 20
+    Stack: 30
     Dilation_Cycle: 10
     Stride: [16, 16]
     Leaky_ReLU_Slope: 0.4
@@ -52,7 +52,7 @@ Train:
             Min: 10
             Max: 200
     Num_Workers: 0
-    Batch_Size: 96
+    Batch_Size: 48
     Learning_Rate:
         Initial: 2.0e-4
         Warmup_Step: 4000
@@ -78,16 +78,16 @@ Train:
 
 Inference_Batch_Size: 256
 
-Inference_Path: '/data/results/DiffWave/Exp1/Inference'
-Checkpoint_Path: '/data/results/DiffWave/Exp1/Checkpoint'
-Log_Path: '/data/results/DiffWave/Exp1/Log'
+Inference_Path: '/data/results/DiffWave/Exp2/Inference'
+Checkpoint_Path: '/data/results/DiffWave/Exp2/Checkpoint'
+Log_Path: '/data/results/DiffWave/Exp2/Log'
 
 Weights_and_Biases:
     Use: true
     # Use: false
     Project: 'DiffWave'
     Entity: 'codejin'
-    Name: 'Exp1'
+    Name: 'Exp2'
     Save_Checkpoint:
         Use: true
         Interval: 50000 # Unlike local, The capacity of WandB is small.
