@@ -48,7 +48,7 @@ class Trainer:
         else:
             self.device = torch.device('cuda:{}'.format(self.gpu_id))
             torch.backends.cudnn.enabled = True
-            torch.backends.cudnn.benchmark = False
+            torch.backends.cudnn.benchmark = True
             torch.cuda.set_device(self.gpu_id)
         
         self.steps = steps

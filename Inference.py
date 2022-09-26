@@ -38,8 +38,8 @@ class Inferencer:
         self.batch_size = batch_size
 
     def Load_Checkpoint(self, path: str):
-        state_dict = torch.load(path, map_location= 'cpu')
-        self.model.load_state_dict(state_dict['Model'])        
+        state_dict = torch.load(path, map_location= 'cpu', )
+        self.model.load_state_dict(state_dict['Model'], strict= False)
         self.steps = state_dict['Steps']
 
         self.model.eval()
@@ -52,6 +52,24 @@ class Inferencer:
         
         audios, *_ = self.model(
             conditions= features
+            )
+        audios = audios.clamp(-1.0, 1.0)
+
+        audios = [
+            audio[:length * self.hp.Sound.Frame_Shift].cpu().numpy()
+            for audio, length in zip(audios, feature_lengths)
+            ]
+
+        return audios
+
+
+    @torch.no_grad()
+    def Inference_DDIM(self, features: torch.Tensor, feature_lengths: List[int], steps: int):
+        features = features.to(self.device, non_blocking=True)
+        
+        audios = self.model.DDIM(
+            conditions= features,
+            num_ddim_timesteps= steps
             )
         audios = audios.clamp(-1.0, 1.0)
 

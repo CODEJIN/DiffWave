@@ -24,6 +24,8 @@ class Diffusion(torch.nn.Module):
         alphas_cumprod_prev = torch.cat([torch.tensor([1.0]), alphas_cumprod[:-1]])
         
         # calculations for diffusion q(x_t | x_{t-1}) and others
+        self.register_buffer('alphas_cumprod', alphas_cumprod)  # [Diffusion_t]
+        self.register_buffer('alphas_cumprod_prev', alphas_cumprod_prev)  # [Diffusion_t]
         self.register_buffer('sqrt_alphas_cumprod', alphas_cumprod.sqrt())  # [Diffusion_t]
         self.register_buffer('sqrt_one_minus_alphas_cumprod', (1.0 - alphas_cumprod).sqrt())    # [Diffusion_t]
         self.register_buffer('sqrt_recip_alphas_cumprod', (1.0 / alphas_cumprod).sqrt())    # [Diffusion_t]
@@ -109,7 +111,8 @@ class Diffusion(torch.nn.Module):
         noises = torch.randn_like(audios)   # [Batch, Audio_t]
         masks = (diffusion_steps > 0).float().unsqueeze(1)  #[Batch, 1]
         
-        return posterior_means + masks * (0.5 * posterior_log_variances).exp() * noises
+        # return posterior_means + masks * (0.5 * posterior_log_variances).exp() * noises
+        return posterior_means
 
     def Get_Posterior(
         self,
@@ -155,6 +158,76 @@ class Diffusion(torch.nn.Module):
             )
         
         return noises, epsilons
+
+    def DDIM(
+        self,
+        conditions: torch.Tensor,
+        num_ddim_timesteps: int,
+        eta: float= 0.0,
+        temperature: float= 1.0
+        ):
+        ddim_timesteps = self.Get_DDIM_Steps(
+            num_ddim_timesteps= num_ddim_timesteps
+            )
+        sigmas, alphas, alphas_prev = self.Get_DDIM_Sampling_Parameters(
+            ddim_timesteps= ddim_timesteps,
+            eta= eta
+            )
+        sqrt_one_minus_alphas = (1. - alphas).sqrt()
+
+        audios = torch.randn(
+            size= (conditions.size(0), conditions.size(2) * self.hp.Sound.Frame_Shift),
+            device= conditions.device
+            )
+
+        for diffusion_steps in tqdm(
+            reversed(range(num_ddim_timesteps)),
+            desc= '[Diffusion]',
+            total= num_ddim_timesteps
+            ):
+            noised_predictions = self.denoiser(
+                x= audios,
+                conditions= conditions,
+                diffusion_steps= torch.full(
+                    size= (conditions.size(0), ),
+                    fill_value= diffusion_steps,
+                    dtype= torch.long,
+                    device= conditions.device
+                    )
+                )
+
+            audio_starts = (audios - sqrt_one_minus_alphas[diffusion_steps] * noised_predictions) / alphas[diffusion_steps].sqrt()
+            direction_pointings = (1.0 - alphas_prev[diffusion_steps] - sigmas[diffusion_steps].pow(2.0)) * noised_predictions
+            noises = sigmas[diffusion_steps] * torch.randn_like(audios) * temperature
+
+            # audios = alphas_prev[diffusion_steps].sqrt() * audio_starts + direction_pointings + noises
+            audios = alphas_prev[diffusion_steps].sqrt() * audio_starts + direction_pointings
+
+        return audios
+
+    # https://github.com/CompVis/stable-diffusion/blob/main/ldm/modules/diffusionmodules/util.py
+    def Get_DDIM_Steps(
+        self,        
+        num_ddim_timesteps: int,
+        ddim_discr_method: str= 'uniform'
+        ):
+        if ddim_discr_method == 'uniform':            
+            ddim_timesteps = torch.range(0, self.timesteps, self.timesteps // num_ddim_timesteps).long()
+        elif ddim_discr_method == 'quad':
+            ddim_timesteps = torch.linspace(0, (torch.tensor(self.timesteps) * 0.8).sqrt(), num_ddim_timesteps).pow(2.0).long()
+        else:
+            raise NotImplementedError(f'There is no ddim discretization method called "{ddim_discr_method}"')
+        
+        ddim_timesteps[-1] = self.timesteps - 1
+
+        return ddim_timesteps
+
+    def Get_DDIM_Sampling_Parameters(self, ddim_timesteps, eta):
+        alphas = self.alphas_cumprod[ddim_timesteps]
+        alphas_prev = self.alphas_cumprod_prev[ddim_timesteps]
+        sigmas = eta * ((1 - alphas_prev) / (1 - alphas) * (1 - alphas / alphas_prev)).sqrt()
+
+        return sigmas, alphas, alphas_prev
 
 
 class Denoiser(torch.nn.Module):
